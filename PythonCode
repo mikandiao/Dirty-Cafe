@@ -1,0 +1,122 @@
+# ==========================================
+# FULL CAFÉ SALES ANALYSIS
+# ==========================================
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# ==========================================
+# 1. LOAD AND INSPECT DATA
+# ==========================================
+file_path = 'dirty_cafe_sales.csv'  # Change path if necessary
+
+try:
+    df = pd.read_csv(file_path)
+    print("✅ File loaded successfully!")
+    print(f"Initial shape: {df.shape}")
+except FileNotFoundError:
+    print("❌ File not found. Please upload 'dirty_cafe_sales.csv'.")
+    raise
+
+# ==========================================
+# 2. DATA CLEANING & TRANSFORMATION
+# ==========================================
+print("\n--- Cleaning Data ---")
+
+# Standardize Missing/Dirty Values
+dirty_markers = ['ERROR', 'UNKNOWN', 'nan', 'Select', '']
+for col in df.columns:
+    df[col] = df[col].replace(dirty_markers, np.nan)
+
+# Fix Inconsistent Data Types
+numeric_cols = ['Quantity', 'Price Per Unit', 'Total Spent']
+for col in numeric_cols:
+    if col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+
+# DATETIME Added 'dayfirst=True' to handle DD/MM/YYYY correctly
+if 'Transaction Date' in df.columns:
+    df['Transaction Date'] = pd.to_datetime(df['Transaction Date'], errors='coerce', dayfirst=True)
+
+# Handle Missing Values
+if {'Total Spent', 'Quantity', 'Price Per Unit'}.issubset(df.columns):
+    df['Total Spent'] = df['Total Spent'].fillna(df['Quantity'] * df['Price Per Unit'])
+
+# Drop rows missing essential info
+df_clean = df.dropna(subset=['Item', 'Total Spent', 'Transaction Date']).copy()
+
+# Feature Engineering
+df_clean['Month'] = df_clean['Transaction Date'].dt.month_name()
+df_clean['Day Name'] = df_clean['Transaction Date'].dt.day_name()
+
+month_order = ['January', 'February', 'March', 'April', 'May', 'June', 
+               'July', 'August', 'September', 'October', 'November', 'December']
+df_clean['Month'] = pd.Categorical(df_clean['Month'], categories=month_order, ordered=True)
+
+print(f"Cleaned shape: {df_clean.shape}")
+print("Data types after cleaning:\n", df_clean.dtypes)
+
+# ==========================================
+# 3 & 4. ANALYSIS & VISUALIZATIONS
+# ==========================================
+sns.set_theme(style="whitegrid")
+
+# ---------- Question 1: Total Revenue by Item ----------
+revenue_by_item = df_clean.groupby('Item')['Total Spent'].sum().sort_values(ascending=False).reset_index()
+revenue_by_item.columns = ['Item', 'Total Revenue ($)']
+print("\n1. Total Revenue by Item (Descending):\n", revenue_by_item)
+
+plt.figure(figsize=(10, 6))
+sns.barplot(x='Item', y='Total Revenue ($)', data=revenue_by_item, palette="viridis")
+plt.title('Total Revenue by Item')
+plt.xlabel('Item Name')
+plt.ylabel('Revenue ($)')
+plt.xticks(rotation=45)
+plt.show()
+
+# ---------- Question 2: Most Ordered Item ----------
+most_ordered = df_clean.groupby('Item')['Quantity'].sum().sort_values(ascending=False).reset_index()
+most_ordered.columns = ['Item', 'Total Quantity Sold']
+top_item = most_ordered.iloc[0]['Item']
+print(f"\n2. Most Ordered Item: {top_item} (Total Quantity: {most_ordered.iloc[0]['Total Quantity Sold']})")
+print("\nAll Items by Quantity (Descending):\n", most_ordered)
+
+plt.figure(figsize=(10, 6))
+sns.barplot(x='Item', y='Total Quantity Sold', data=most_ordered, palette="magma")
+plt.title('Most Ordered Items (By Quantity)')
+plt.xlabel('Item Name')
+plt.ylabel('Total Quantity Sold')
+plt.xticks(rotation=45)
+plt.show()
+
+# ---------- Question 3: Day with Highest Sales Volume ----------
+sales_by_day = df_clean.groupby('Day Name')['Total Spent'].sum().reindex(
+    ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+).sort_values(ascending=False).reset_index()
+sales_by_day.columns = ['Day', 'Total Revenue ($)']
+top_day = sales_by_day.iloc[0]['Day']
+print(f"\n3. Day with Highest Sales Volume (Revenue): {top_day}")
+print("\nSales by Day (Descending Revenue):\n", sales_by_day)
+
+plt.figure(figsize=(10, 6))
+sns.barplot(x='Day', y='Total Revenue ($)', data=sales_by_day, palette="coolwarm")
+plt.title('Sales Volume by Day of Week')
+plt.xlabel('Day')
+plt.ylabel('Total Revenue ($)')
+plt.show()
+
+# ---------- Question 4: Revenue Trends Across Months ----------
+revenue_by_month = df_clean.groupby('Month')['Total Spent'].sum().sort_values(ascending=False).reset_index()
+revenue_by_month.columns = ['Month', 'Total Revenue ($)']
+print("\n4. Revenue Trends by Month (Descending):\n", revenue_by_month)
+
+plt.figure(figsize=(12, 6))
+sns.lineplot(x='Month', y='Total Revenue ($)', data=revenue_by_month, marker='o', linewidth=2.5, color='blue')
+plt.title('Revenue Trends Across Months')
+plt.xlabel('Month')
+plt.ylabel('Total Revenue ($)')
+plt.xticks(rotation=45)
+plt.grid(True)
+plt.show()
